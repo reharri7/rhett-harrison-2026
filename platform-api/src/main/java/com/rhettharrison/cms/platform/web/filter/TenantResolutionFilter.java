@@ -1,18 +1,34 @@
 package com.rhettharrison.cms.platform.web.filter;
 
 import com.rhettharrison.cms.platform.common.tenant.TenantContext;
+import com.rhettharrison.cms.platform.domain.model.Tenant;
+import com.rhettharrison.cms.platform.domain.model.TenantDomain;
+import com.rhettharrison.cms.platform.domain.model.TenantDomainRepository;
+import com.rhettharrison.cms.platform.domain.model.TenantRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import org.slf4j.MDC;
+import java.util.Optional;
+import java.util.UUID;
 
 @Component
+@RequiredArgsConstructor
 public class TenantResolutionFilter extends OncePerRequestFilter {
+  private static final Logger logger = LoggerFactory.getLogger(TenantResolutionFilter.class);
+
+  private final TenantRepository tenantRepository;
+  private final TenantDomainRepository tenantDomainRepository;
+  private final Environment environment;
 
   @Override
   protected void doFilterInternal(HttpServletRequest request,
@@ -20,18 +36,28 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
                                   FilterChain filterChain) throws ServletException, IOException {
 
     try {
-      // Resolve tenant from subdomain
-      String host = request.getHeader("Host"); // e.g., tenant1.example.com
-      String tenantId = resolveTenantFromHost(host);
+      String host = request.getHeader("Host");
 
-      if (tenantId == null) {
-        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Tenant could not be resolved");
+      if (host == null || host.isBlank()) {
+        logger.warn("Request received with no Host header");
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Host header is required");
         return;
       }
 
-      // Set tenant in request-scoped context
-      TenantContext.setTenantId(tenantId);
-      MDC.put("tenantId", TenantContext.getTenantId());
+      // Strip port if present (localhost:8080 -> localhost)
+      String domain = host.split(":")[0];
+
+      // Resolve tenant
+      Optional<UUID> tenantId = resolveTenantId(domain);
+
+      if (tenantId.isEmpty()) {
+        logger.warn("Unknown tenant for domain: {}", domain);
+        response.sendError(HttpServletResponse.SC_NOT_FOUND, "Tenant not found");
+        return;
+      }
+
+      TenantContext.setTenantId(tenantId.get());
+      MDC.put("tenantId", tenantId.get().toString());
 
       filterChain.doFilter(request, response);
     } finally {
@@ -41,16 +67,48 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
     }
   }
 
-  private String resolveTenantFromHost(String host) {
-    if (host == null || host.isEmpty()) return null;
-
-    String[] parts = host.split("\\.");
-    if (parts.length < 2) {
-      // fallback to "default" tenant for localhost/testing
-      return "default";
+  private Optional<UUID> resolveTenantId(String domain) {
+    // 1. Try exact match in tenant_domains table
+    Optional<TenantDomain> tenantDomain = tenantDomainRepository.findByDomain(domain);
+    if (tenantDomain.isPresent()) {
+      return Optional.of(tenantDomain.get().getTenantId());
     }
 
-    return parts[0];
+    // 2. For dev profiles, allow localhost to resolve to default tenant
+    if (isDevProfile() && "localhost".equals(domain)) {
+      Optional<Tenant> defaultTenant = tenantRepository.findBySlug("default");
+      return defaultTenant.map(Tenant::getId);
+    }
+
+    // 3. Fallback to subdomain parsing (e.g., alice.yourblog.com -> alice)
+    String slug = extractSlugFromDomain(domain);
+    if (slug != null) {
+      Optional<Tenant> tenant = tenantRepository.findBySlug(slug);
+      return tenant.map(Tenant::getId);
+    }
+
+    return Optional.empty();
   }
 
+  private String extractSlugFromDomain(String domain) {
+    String[] parts = domain.split("\\.");
+
+    // Need at least 3 parts for subdomain (e.g., alice.yourblog.com)
+    if (parts.length >= 3) {
+      return parts[0];
+    }
+
+    return null;
+  }
+
+  private boolean isDevProfile() {
+    String[] activeProfiles = environment.getActiveProfiles();
+    for (String profile : activeProfiles) {
+      if ("dev".equals(profile) || "local".equals(profile)) {
+        return true;
+      }
+    }
+    // Default to dev behavior if no profile is set
+    return activeProfiles.length == 0;
+  }
 }

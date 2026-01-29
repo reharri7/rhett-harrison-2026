@@ -1,6 +1,5 @@
-package com.rhettharrison.cms.platform.common.jpa;
+package com.rhettharrison.cms.platform.common.tenant;
 
-import com.rhettharrison.cms.platform.common.tenant.TenantContext;
 import jakarta.persistence.PrePersist;
 
 public class TenantEntityListener {
