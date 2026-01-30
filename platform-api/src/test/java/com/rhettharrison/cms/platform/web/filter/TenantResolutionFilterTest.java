@@ -121,6 +121,62 @@ class TenantResolutionFilterTest {
   }
 
   @Test
+  void doFilterInternal_shouldNormalizeUppercaseAndPort_thenResolveFromSubdomain() throws Exception {
+    UUID tenantId = UUID.randomUUID();
+    Tenant tenant = mock(Tenant.class);
+    when(tenant.getId()).thenReturn(tenantId);
+
+    when(request.getHeader("Host")).thenReturn("ALICE.Example.COM:443");
+    when(tenantDomainRepository.findByDomain("alice.example.com")).thenReturn(Optional.empty());
+    when(tenantRepository.findBySlug("alice")).thenReturn(Optional.of(tenant));
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    verify(filterChain).doFilter(request, response);
+  }
+
+  @Test
+  void doFilterInternal_shouldHandleTrailingDot() throws Exception {
+    UUID tenantId = UUID.randomUUID();
+    Tenant tenant = mock(Tenant.class);
+    when(tenant.getId()).thenReturn(tenantId);
+
+    when(request.getHeader("Host")).thenReturn("alice.example.com.");
+    when(tenantDomainRepository.findByDomain("alice.example.com")).thenReturn(Optional.empty());
+    when(tenantRepository.findBySlug("alice")).thenReturn(Optional.of(tenant));
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    verify(filterChain).doFilter(request, response);
+  }
+
+  @Test
+  void doFilterInternal_shouldNormalizeIdnHost() throws Exception {
+    UUID tenantId = UUID.randomUUID();
+    Tenant tenant = mock(Tenant.class);
+    when(tenant.getId()).thenReturn(tenantId);
+
+    // münich.example.com -> xn--mnich-kva.example.com
+    when(request.getHeader("Host")).thenReturn("münich.example.com");
+    when(tenantDomainRepository.findByDomain("xn--mnich-kva.example.com")).thenReturn(Optional.empty());
+    when(tenantRepository.findBySlug("xn--mnich-kva")).thenReturn(Optional.of(tenant));
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    verify(filterChain).doFilter(request, response);
+  }
+
+  @Test
+  void doFilterInternal_should400OnInvalidHostWithPath() throws Exception {
+    when(request.getHeader("Host")).thenReturn("example.com/path");
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    verify(response).sendError(HttpServletResponse.SC_BAD_REQUEST, "Host header is required");
+    verify(filterChain, never()).doFilter(request, response);
+  }
+
+  @Test
   void doFilterInternal_shouldReturn404ForUnknownTenant() throws Exception {
     when(request.getHeader("Host")).thenReturn("unknown.yourblog.com");
     when(tenantDomainRepository.findByDomain(anyString())).thenReturn(Optional.empty());

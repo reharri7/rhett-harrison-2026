@@ -5,6 +5,7 @@ import com.rhettharrison.cms.platform.domain.model.Tenant;
 import com.rhettharrison.cms.platform.domain.model.TenantDomain;
 import com.rhettharrison.cms.platform.domain.model.TenantDomainRepository;
 import com.rhettharrison.cms.platform.domain.model.TenantRepository;
+import com.rhettharrison.cms.platform.common.util.DomainNormalizer;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,16 +37,14 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
                                   FilterChain filterChain) throws ServletException, IOException {
 
     try {
-      String host = request.getHeader("Host");
+      String hostHeader = request.getHeader("Host");
+      String domain = DomainNormalizer.normalizeHostHeader(hostHeader);
 
-      if (host == null || host.isBlank()) {
+      if (domain == null || domain.isBlank()) {
         logger.warn("Request received with no Host header");
         response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Host header is required");
         return;
       }
-
-      // Strip port if present (localhost:8080 -> localhost)
-      String domain = host.split(":")[0];
 
       // Resolve tenant
       Optional<UUID> tenantId = resolveTenantId(domain);
@@ -95,7 +94,7 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
 
     // Need at least 3 parts for subdomain (e.g., alice.yourblog.com)
     if (parts.length >= 3) {
-      return parts[0];
+      return parts[0].toLowerCase();
     }
 
     return null;

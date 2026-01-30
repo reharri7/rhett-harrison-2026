@@ -23,9 +23,6 @@ public class Tenant {
   @Column(nullable = false)
   private String name;
 
-  @Column(name = "primary_domain")
-  private String primaryDomain;
-
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
