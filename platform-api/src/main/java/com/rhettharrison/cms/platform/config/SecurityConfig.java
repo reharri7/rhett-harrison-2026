@@ -26,6 +26,8 @@ public class SecurityConfig {
                 "/swagger-ui.html",
                 "/swagger-ui/**"
             ).permitAll()
+            // Public read API (screens)
+            .requestMatchers(HttpMethod.GET, "/api/v1/screens").permitAll()
             .anyRequest().authenticated()
         );
 

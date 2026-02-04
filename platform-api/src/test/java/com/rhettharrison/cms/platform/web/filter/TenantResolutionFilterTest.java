@@ -58,6 +58,33 @@ class TenantResolutionFilterTest {
   }
 
   @Test
+  void shouldNotFilter_shouldBypassForOpenApiAndSwaggerAndHealth() throws Exception {
+    // OpenAPI root
+    when(request.getRequestURI()).thenReturn("/v3/api-docs");
+    assertTrue(filter.shouldNotFilter(request));
+
+    // OpenAPI group/config subpaths
+    when(request.getRequestURI()).thenReturn("/v3/api-docs/swagger-config");
+    assertTrue(filter.shouldNotFilter(request));
+
+    // Swagger UI
+    when(request.getRequestURI()).thenReturn("/swagger-ui/index.html");
+    assertTrue(filter.shouldNotFilter(request));
+
+    // Swagger UI legacy
+    when(request.getRequestURI()).thenReturn("/swagger-ui.html");
+    assertTrue(filter.shouldNotFilter(request));
+
+    // Health
+    when(request.getRequestURI()).thenReturn("/health");
+    assertTrue(filter.shouldNotFilter(request));
+
+    // A normal API path should not be bypassed
+    when(request.getRequestURI()).thenReturn("/api/v1/anything");
+    assertFalse(filter.shouldNotFilter(request));
+  }
+
+  @Test
   void doFilterInternal_shouldResolveTenantFromDomainTable() throws Exception {
     UUID tenantId = UUID.randomUUID();
     TenantDomain tenantDomain = mock(TenantDomain.class);

@@ -32,6 +32,16 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
   private final Environment environment;
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    String path = request.getRequestURI();
+    if (path == null) return false;
+    return path.startsWith("/v3/api-docs")
+        || path.startsWith("/swagger-ui")
+        || "/swagger-ui.html".equals(path)
+        || "/health".equals(path);
+  }
+
+  @Override
   protected void doFilterInternal(HttpServletRequest request,
                                   HttpServletResponse response,
                                   FilterChain filterChain) throws ServletException, IOException {
