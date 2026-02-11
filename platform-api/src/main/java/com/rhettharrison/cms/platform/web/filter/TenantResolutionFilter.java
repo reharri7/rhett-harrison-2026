@@ -6,6 +6,7 @@ import com.rhettharrison.cms.platform.domain.model.TenantDomain;
 import com.rhettharrison.cms.platform.domain.model.TenantDomainRepository;
 import com.rhettharrison.cms.platform.domain.model.TenantRepository;
 import com.rhettharrison.cms.platform.common.util.DomainNormalizer;
+import com.rhettharrison.cms.platform.web.error.ErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -23,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 1) // Run right after RequestIdFilter
 @RequiredArgsConstructor
 public class TenantResolutionFilter extends OncePerRequestFilter {
   private static final Logger logger = LoggerFactory.getLogger(TenantResolutionFilter.class);
@@ -52,7 +56,7 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
 
       if (domain == null || domain.isBlank()) {
         logger.warn("Request received with no Host header");
-        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Host header is required");
+        ErrorResponseWriter.write(response, HttpServletResponse.SC_BAD_REQUEST, "BAD_REQUEST", "Host header is required");
         return;
       }
 
@@ -61,12 +65,15 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
 
       if (tenantId.isEmpty()) {
         logger.warn("Unknown tenant for domain: {}", domain);
-        response.sendError(HttpServletResponse.SC_NOT_FOUND, "Tenant not found");
+        ErrorResponseWriter.write(response, HttpServletResponse.SC_NOT_FOUND, "TENANT_NOT_FOUND", "Tenant not found");
         return;
       }
 
       TenantContext.setTenantId(tenantId.get());
       MDC.put("tenantId", tenantId.get().toString());
+      if (logger.isDebugEnabled()) {
+        logger.debug("Resolved tenantId={} for request host header: {}", tenantId.get(), request.getHeader("Host"));
+      }
 
       filterChain.doFilter(request, response);
     } finally {

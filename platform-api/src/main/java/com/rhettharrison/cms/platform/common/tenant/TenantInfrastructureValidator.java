@@ -1,32 +1,42 @@
 package com.rhettharrison.cms.platform.common.tenant;
 
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import org.hibernate.SessionFactory;
 import org.hibernate.engine.spi.FilterDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
 import jakarta.persistence.EntityManagerFactory;
+import com.rhettharrison.cms.platform.web.filter.RequestIdFilter;
+import com.rhettharrison.cms.platform.web.filter.TenantResolutionFilter;
 
 /**
  * Validates tenant infrastructure is properly configured at startup.
  * Fails fast if critical tenant components are missing.
  */
 @Component
-@RequiredArgsConstructor
 public class TenantInfrastructureValidator {
 
   private static final Logger logger = LoggerFactory.getLogger(TenantInfrastructureValidator.class);
 
   private final EntityManagerFactory entityManagerFactory;
+  private final ApplicationContext applicationContext;
+
+  // Explicit constructor to ensure final fields are initialized without relying on Lombok
+  public TenantInfrastructureValidator(EntityManagerFactory entityManagerFactory,
+                                       ApplicationContext applicationContext) {
+    this.entityManagerFactory = entityManagerFactory;
+    this.applicationContext = applicationContext;
+  }
 
   @PostConstruct
   public void validateTenantInfrastructure() {
     logger.info("Validating tenant infrastructure...");
 
     validateHibernateFilterExists();
+    validateCriticalFiltersPresent();
 
     logger.info("Tenant infrastructure validation complete ✓");
   }
@@ -49,5 +59,19 @@ public class TenantInfrastructureValidator {
     }
 
     logger.info("✓ Hibernate tenant filter 'tenantFilter' is properly configured");
+  }
+
+  private void validateCriticalFiltersPresent() {
+    boolean hasRequestId = !applicationContext.getBeansOfType(RequestIdFilter.class).isEmpty();
+    boolean hasTenantResolution = !applicationContext.getBeansOfType(TenantResolutionFilter.class).isEmpty();
+
+    if (!hasRequestId) {
+      throw new IllegalStateException("RequestIdFilter bean is missing. It must be registered to populate MDC requestId.");
+    }
+    if (!hasTenantResolution) {
+      throw new IllegalStateException("TenantResolutionFilter bean is missing. It must be registered to establish TenantContext per request.");
+    }
+
+    logger.info("✓ Critical filters present: RequestIdFilter and TenantResolutionFilter");
   }
 }

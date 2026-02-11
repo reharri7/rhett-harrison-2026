@@ -101,6 +101,60 @@ Initial implementation using a single tenant while enforcing all multi-tenant co
 - Repository scoping applied
 - Personal site deployed as first tenant
 
+#### Developer quickstart (API)
+
+- Swagger UI (auto-generated via springdoc): `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Health check: `GET http://localhost:8080/health`
+
+Local database with Docker
+- A Postgres service is provided via docker-compose.
+- From the repository root, start the database:
+  - `docker compose up -d db`
+- Default connection (matches application.properties):
+  - URL: `jdbc:postgresql://localhost:5432/platform`
+  - User: `platform`
+  - Password: `platform`
+
+Run the API locally
+1) Ensure Docker DB is running (see above)
+2) Start the API (optionally with a local/dev profile to enable the admin seeder):
+   - Linux/macOS: `SPRING_PROFILES_ACTIVE=local ./mvnw -pl platform-api spring-boot:run`
+   - Windows (PowerShell): `$env:SPRING_PROFILES_ACTIVE="local"; ./mvnw -pl platform-api spring-boot:run`
+3) Visit Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+4) Use a Host header in requests for tenant resolution (e.g., `default.yourblog.com`). Swagger allows setting headers per request under "Try it out".
+
+Authentication and local admin user
+- The API uses JWT (Bearer) auth. For local/dev profiles, an admin user can be auto-seeded for the `default` tenant.
+- Seeder is active only when `SPRING_PROFILES_ACTIVE` includes `local` or `dev`.
+- Default seed values (override via env):
+  - `seed.admin.username=admin`
+  - `seed.admin.password=password`
+  - `seed.admin.roles=ROLE_ADMIN`
+
+Login flow (local)
+1. Start the API with a local/dev profile (e.g., `SPRING_PROFILES_ACTIVE=local`). Ensure DB is reachable.
+2. In Swagger, call `POST /auth/login` with the seeded credentials.
+3. Copy the returned token, click the “Authorize” button, and paste `Bearer <token>`.
+4. Call secured admin endpoints (when available) from Swagger with the token.
+
+Example curls
+- Public (no auth):
+  - `curl -s 'http://localhost:8080/api/v1/screens?path=/' -H 'Host: default.yourblog.com' | jq`
+- Login:
+  - `curl -s -X POST 'http://localhost:8080/auth/login' -H 'Host: default.yourblog.com' -H 'Content-Type: application/json' -d '{"username":"admin","password":"password"}' | jq`
+  - Create screen (requires Bearer token and Host):
+  - `curl -s -X POST 'http://localhost:8080/api/v1/admin/screens' -H 'Authorization: Bearer <token>' -H 'Host: default.yourblog.com' -H 'Content-Type: application/json' -d '{"path":"/about","type":"MARKDOWN","status":"DRAFT","content":"{}"}' | jq`
+
+Local profile and environment variables
+- A local profile file is provided at `platform-api/src/main/resources/application-local.properties` with sensible developer defaults (DB, Flyway, JWT, logging). Activate it with:
+  - Linux/macOS: `SPRING_PROFILES_ACTIVE=local ./mvnw -pl platform-api spring-boot:run`
+  - Windows (PowerShell): `$env:SPRING_PROFILES_ACTIVE="local"; ./mvnw -pl platform-api spring-boot:run`
+- You can override any property via environment variables without changing tracked files, for example:
+  - `export APP_JWT_SECRET=your-strong-secret` (maps to `app.jwt.secret`)
+  - `export SEED_ADMIN_USERNAME=admin` `export SEED_ADMIN_PASSWORD=password` `export SEED_ADMIN_ROLES=ROLE_ADMIN,ROLE_EDITOR`
+- Tip: You may also create a personal `.env` or shell profile export file locally (not committed) and source it before starting the app.
+
 ---
 
 ## Roadmap

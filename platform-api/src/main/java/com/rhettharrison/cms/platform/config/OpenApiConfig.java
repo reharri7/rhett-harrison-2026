@@ -1,7 +1,8 @@
 package com.rhettharrison.cms.platform.config;
 
-import io.swagger.v3.oas.models.ExternalDocumentation;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
@@ -13,6 +14,13 @@ public class OpenApiConfig {
 
   @Bean
   public OpenAPI platformOpenAPI() {
+    // Define a reusable Bearer JWT security scheme (can be applied at operation level)
+    SecurityScheme bearerJwt = new SecurityScheme()
+        .type(SecurityScheme.Type.HTTP)
+        .scheme("bearer")
+        .bearerFormat("JWT")
+        .name("Authorization");
+
     return new OpenAPI()
         .info(new Info()
             .title("Platform API — Multi‑Tenant CMS")
@@ -21,6 +29,7 @@ public class OpenApiConfig {
             .version("v1")
             .license(new License().name("MIT"))
             .contact(new Contact().name("Rhett Harrison"))
-        );
+        )
+        .components(new Components().addSecuritySchemes("bearer-jwt", bearerJwt));
   }
 }
